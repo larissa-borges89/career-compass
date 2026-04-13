@@ -1,11 +1,12 @@
-from src.tracker import add_application, list_applications, update_status
+from src.tracker import add_application, list_applications, update_status, sync_emails_to_tracker
 
 def show_menu():
     print("\n=== Career Compass ===")
     print("1. Add application")
     print("2. List applications")
     print("3. Update status")
-    print("4. Exit")
+    print("4. Sync emails to tracker")
+    print("5. Exit")
     return input("\nChoose an option: ")
 
 def handle_add():
@@ -47,6 +48,8 @@ def main():
         elif choice == "3":
             handle_update()
         elif choice == "4":
+            sync_emails_to_tracker()
+        elif choice == "5":
             print("\nGoodbye! 👋")
             break
         else:

@@ -46,3 +46,49 @@ def update_status(app_id, new_status):
             save_applications(applications)
             return app
     return None
+
+def sync_emails_to_tracker():
+    """Fetch job emails, classify with Claude AI, and sync to tracker."""
+    from src.gmail_api import process_job_emails
+
+    print("\n🔄 Syncing emails to tracker...\n")
+    results = process_job_emails()
+
+    if not results:
+        print("No job-related emails found.")
+        return
+
+    applications = load_applications()
+    synced = 0
+
+    for result in results:
+        company = result["from"].split("<")[0].strip().strip('"')
+        subject = result["email"]
+        status = result["status"]
+        summary = result["summary"]
+
+        # Check if application already exists
+        existing = next((a for a in applications if
+                        subject.lower() in a.get("notes", "").lower() or
+                        company.lower() in a.get("company", "").lower()), None)
+
+        if existing:
+            existing["status"] = status
+            existing["updated_at"] = datetime.now().isoformat()
+            print(f"✅ Updated: {existing['company']} → {status}")
+        else:
+            new_app = {
+                "id": len(applications) + 1,
+                "company": company,
+                "role": subject,
+                "status": status,
+                "notes": summary,
+                "created_at": datetime.now().isoformat()
+            }
+            applications.append(new_app)
+            print(f"➕ Added: {company} → {status}")
+
+        synced += 1
+
+    save_applications(applications)
+    print(f"\n✅ Synced {synced} emails to tracker.")
