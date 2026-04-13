@@ -55,3 +55,27 @@ def fetch_job_emails(max_results=10):
         })
 
     return emails
+
+def process_job_emails():
+    """Fetch emails and classify them using Claude AI."""
+    from src.claude_ai import classify_email
+    from src.tracker import list_applications, update_status
+
+    emails = fetch_job_emails()
+    results = []
+
+    for email in emails:
+        classification = classify_email(
+            subject=email["subject"],
+            body=email["snippet"]
+        )
+
+        results.append({
+            "email": email["subject"],
+            "from": email["from"],
+            "date": email["date"],
+            "status": classification["status"],
+            "summary": classification["summary"]
+        })
+
+    return results
