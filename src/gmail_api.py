@@ -27,11 +27,24 @@ def get_gmail_service():
 
     return build("gmail", "v1", credentials=creds)
 
-def fetch_job_emails(max_results=10):
-    """Fetch job-related emails from Gmail."""
+def fetch_job_emails(max_results=20):
+    """Fetch real job-related emails, excluding newsletters and marketing."""
     service = get_gmail_service()
 
-    query = "subject:(application OR interview OR offer OR rejected OR hiring)"
+    query = (
+        "("
+        "subject:(application OR interview OR offer OR hiring OR "
+        "\"thank you for applying\" OR \"next steps\" OR "
+        "\"we received\" OR \"unfortunately\" OR \"moving forward\") "
+        "OR from:(recruit OR talent OR hiring OR hr) "
+        ") "
+        "-from:(interviewkickstart.com OR editors-noreply@linkedin.com OR "
+        "jobalerts-noreply@linkedin.com OR ziprecruiter.com) "
+        "-category:promotions "
+        "-category:social "
+        "-subject:(unsubscribe OR newsletter)"
+    )
+    
     results = service.users().messages().list(
         userId="me", q=query, maxResults=max_results
     ).execute()
@@ -55,6 +68,7 @@ def fetch_job_emails(max_results=10):
         })
 
     return emails
+
 
 def process_job_emails():
     """Fetch emails and classify them using Claude AI."""
