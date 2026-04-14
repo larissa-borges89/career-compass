@@ -1,7 +1,9 @@
 """
 Rate limiter for external APIs.
-Tracks daily usage in data/api_usage.json and enforces limits
+Tracks usage in data/api_usage.json and enforces limits
 before making calls — zero waste of API quota.
+
+Supports daily and monthly periods.
 """
 
 import json
@@ -13,11 +15,11 @@ logger = get_logger("rate_limiter")
 
 USAGE_FILE = "data/api_usage.json"
 
-# Daily limits (adjust based on your plan)
+# Real limits based on actual free tier plans
 LIMITS = {
-    "adzuna":  250,   # Adzuna free: 250/day
-    "serpapi": 100,   # SerpAPI free: 100/month (~3/day safe buffer)
-    "claude":  50,    # Claude API calls per day (conservative)
+    "adzuna":  {"limit": 250, "period": "day"},    # Adzuna free: 250 requests/day
+    "serpapi": {"limit": 100, "period": "month"},  # SerpAPI free: 100 searches/month
+    "claude":  {"limit": 50,  "period": "day"},    # Conservative daily cap on Claude calls
 }
 
 
@@ -37,17 +39,28 @@ def _save(data: dict):
         json.dump(data, f, indent=2)
 
 
-def _today() -> str:
-    return str(date.today())
+def _period_key(period: str) -> str:
+    today = date.today()
+    if period == "month":
+        return today.strftime("%Y-%m")  # e.g. "2026-04"
+    return str(today)                   # e.g. "2026-04-14"
 
 
 def get_usage(api: str) -> dict:
     """Returns current usage and limit for an API."""
+    config = LIMITS.get(api, {"limit": 999, "period": "day"})
+    period_key = _period_key(config["period"])
     data = _load()
-    today = _today()
-    count = data.get(today, {}).get(api, 0)
-    limit = LIMITS.get(api, 999)
-    return {"api": api, "used": count, "limit": limit, "remaining": limit - count}
+    used = data.get(period_key, {}).get(api, 0)
+    limit = config["limit"]
+    return {
+        "api": api,
+        "used": used,
+        "limit": limit,
+        "remaining": limit - used,
+        "period": config["period"],
+        "resets": "midnight" if config["period"] == "day" else "1st of next month",
+    }
 
 
 def check_limit(api: str) -> bool:
@@ -55,7 +68,8 @@ def check_limit(api: str) -> bool:
     usage = get_usage(api)
     if usage["remaining"] <= 0:
         logger.warning(
-            f"Rate limit reached for {api}: {usage['used']}/{usage['limit']} calls today"
+            f"Rate limit reached for {api}: {usage['used']}/{usage['limit']} "
+            f"this {usage['period']} (resets {usage['resets']})"
         )
         return False
     return True
@@ -63,16 +77,20 @@ def check_limit(api: str) -> bool:
 
 def increment(api: str, count: int = 1):
     """Increments the call counter for an API."""
+    config = LIMITS.get(api, {"limit": 999, "period": "day"})
+    period_key = _period_key(config["period"])
     data = _load()
-    today = _today()
-    if today not in data:
-        data[today] = {}
-    data[today][api] = data[today].get(api, 0) + count
+    if period_key not in data:
+        data[period_key] = {}
+    data[period_key][api] = data[period_key].get(api, 0) + count
     _save(data)
     usage = get_usage(api)
-    logger.info(f"API usage [{api}]: {usage['used']}/{usage['limit']} today")
+    logger.info(
+        f"API usage [{api}]: {usage['used']}/{usage['limit']} this {usage['period']} "
+        f"({usage['remaining']} remaining)"
+    )
 
 
 def get_all_usage() -> dict:
-    """Returns usage summary for all APIs today."""
+    """Returns usage summary for all APIs."""
     return {api: get_usage(api) for api in LIMITS}
