@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from api.database import get_db
 from api.models import Application, JobListing
 from src.logger import get_logger
+from src.rate_limiter import check_limit, increment, get_all_usage
 
 logger = get_logger("routes")
 router = APIRouter()
@@ -93,15 +94,23 @@ def search_jobs(request: JobSearchRequest, db: Session = Depends(get_db)):
     profile = parse_resume(resume_path)
     logger.info(f"Resume parsed: {len(profile.get('skills', []))} skills found")
 
+    if not check_limit("claude"):
+        raise HTTPException(status_code=429, detail="Claude API daily limit reached. Try again tomorrow.")
     logger.info("Generating search keywords with Claude AI...")
     keywords = generate_search_keywords(profile)
+    increment("claude")
     logger.info(f"Keywords generated: {keywords}")
 
     all_jobs = []
     seen = set()
     for keyword in keywords[:3]:
+        if not check_limit("adzuna") and not check_limit("serpapi"):
+            logger.warning("Both Adzuna and SerpAPI limits reached — stopping search early")
+            break
         logger.info(f"Searching jobs for: '{keyword}' in {request.location}")
         jobs = do_search(keyword, request.location)
+        increment("adzuna")
+        increment("serpapi")
         active = filter_ghost_jobs(jobs, max_days=request.max_days)
         logger.info(f"  → {len(jobs)} found, {len(active)} after ghost filter")
         for job in active:
@@ -219,6 +228,14 @@ def get_profile():
     if not os.path.exists(resume_path):
         raise HTTPException(status_code=404, detail="No resume found.")
     return parse_resume(resume_path)
+
+
+# ─── API Usage ───────────────────────────────────────────────────────────────
+
+@router.get("/usage")
+def api_usage():
+    """Returns daily API usage for all external services."""
+    return get_all_usage()
 
 
 # ─── Stats ───────────────────────────────────────────────────────────────────
