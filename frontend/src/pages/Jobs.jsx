@@ -9,7 +9,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import { getJobs, searchJobs, applyToJob } from '../services/api';
+import { getJobs, searchJobs, applyToJob, getApplications } from '../services/api';
 
 const VERDICT_COLOR = {
   strong_match: 'success',
@@ -25,9 +25,9 @@ const VERDICT_LABEL = {
   no_match: 'No Match',
 };
 
-function JobCard({ job, onApply }) {
-  const [applied, setApplied] = useState(false);
+function JobCard({ job, onApply, savedIds, onSaved }) {
   const [loading, setLoading] = useState(false);
+  const applied = savedIds.has(job.id);
   const score = Math.round(job.match_score || 0);
   const matchingSkills = typeof job.matching_skills === 'string'
     ? JSON.parse(job.matching_skills || '[]')
@@ -40,8 +40,7 @@ function JobCard({ job, onApply }) {
     setLoading(true);
     try {
       await applyToJob(job.id);
-      setApplied(true);
-      onApply();
+      onSaved(job.id);
     } catch (e) {
       console.error(e);
     }
@@ -164,12 +163,28 @@ export default function Jobs() {
   const [maxDays, setMaxDays] = useState(2);
   const [minScore, setMinScore] = useState(60);
   const [message, setMessage] = useState('');
+  const [savedIds, setSavedIds] = useState(new Set());
+
+  const handleSaved = (id) => setSavedIds(prev => new Set([...prev, id]));
 
   const loadJobs = async () => {
     setLoading(true);
     try {
-      const res = await getJobs();
-      setJobs(res.data);
+      const [jobsRes, appsRes] = await Promise.all([getJobs(), getApplications()]);
+      const jobs = jobsRes.data;
+      const apps = appsRes.data;
+
+      // Build savedIds by matching company+role between jobs and existing applications
+      const savedSet = new Set();
+      jobs.forEach(job => {
+        const alreadySaved = apps.some(
+          app => app.company === job.company && app.role === job.title
+        );
+        if (alreadySaved) savedSet.add(job.id);
+      });
+
+      setJobs(jobs);
+      setSavedIds(savedSet);
     } catch (e) {
       console.error(e);
     }
@@ -252,7 +267,7 @@ export default function Jobs() {
           <Grid container spacing={2}>
             {jobs.map(job => (
               <Grid item xs={12} sm={6} md={4} key={job.id}>
-                <JobCard job={job} onApply={loadJobs} />
+                <JobCard job={job} savedIds={savedIds} onSaved={handleSaved} />
               </Grid>
             ))}
           </Grid>

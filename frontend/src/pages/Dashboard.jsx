@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  Box, Grid, Card, CardContent, Typography, Chip, CircularProgress,
-  LinearProgress, IconButton, Tooltip, Select, MenuItem, FormControl, InputLabel
+  Box, Grid, Card, CardContent, CardActions, Typography, Chip, CircularProgress,
+  Button, IconButton, Tooltip, Select, MenuItem, FormControl, InputLabel
 } from '@mui/material';
 import WorkIcon from '@mui/icons-material/Work';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -9,9 +9,12 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import CancelIcon from '@mui/icons-material/Cancel';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import EditIcon from '@mui/icons-material/Edit';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getApplications, getStats, updateApplication } from '../services/api';
 
 const STATUS_COLORS = {
+  saved: 'default',
   applied: 'primary',
   interview_scheduled: 'warning',
   offer: 'success',
@@ -19,6 +22,7 @@ const STATUS_COLORS = {
 };
 
 const STATUS_LABELS = {
+  saved: 'Saved',
   applied: 'Applied',
   interview_scheduled: 'Interview',
   offer: 'Offer',
@@ -26,6 +30,7 @@ const STATUS_LABELS = {
 };
 
 const STATUS_ICONS = {
+  saved: <BookmarkIcon fontSize="small" />,
   applied: <WorkIcon fontSize="small" />,
   interview_scheduled: <ScheduleIcon fontSize="small" />,
   offer: <CheckCircleIcon fontSize="small" />,
@@ -52,6 +57,13 @@ function ApplicationCard({ app, onStatusUpdate }) {
   const [editing, setEditing] = useState(false);
   const [status, setStatus] = useState(app.status);
 
+  const matchingSkills = (() => {
+    try { return JSON.parse(app.matching_skills || '[]'); } catch { return []; }
+  })();
+  const missingSkills = (() => {
+    try { return JSON.parse(app.missing_skills || '[]'); } catch { return []; }
+  })();
+
   const handleStatusChange = async (newStatus) => {
     setStatus(newStatus);
     setEditing(false);
@@ -60,10 +72,11 @@ function ApplicationCard({ app, onStatusUpdate }) {
   };
 
   return (
-    <Card sx={{ borderRadius: 3, boxShadow: 1, '&:hover': { boxShadow: 3 }, transition: '0.2s' }}>
-      <CardContent>
+    <Card sx={{ borderRadius: 3, boxShadow: 1, '&:hover': { boxShadow: 3 }, transition: '0.2s', display: 'flex', flexDirection: 'column' }}>
+      <CardContent sx={{ flex: 1 }}>
+        {/* Header */}
         <Box display="flex" justifyContent="space-between" alignItems="flex-start">
-          <Box flex={1}>
+          <Box flex={1} pr={1}>
             <Typography variant="h6" fontWeight="bold" noWrap>{app.role}</Typography>
             <Typography variant="body2" color="text.secondary" gutterBottom>{app.company}</Typography>
             {app.location && (
@@ -87,6 +100,7 @@ function ApplicationCard({ app, onStatusUpdate }) {
           </Box>
         </Box>
 
+        {/* Status */}
         {editing ? (
           <FormControl size="small" fullWidth sx={{ mt: 1 }}>
             <InputLabel>Status</InputLabel>
@@ -107,16 +121,58 @@ function ApplicationCard({ app, onStatusUpdate }) {
           </Box>
         )}
 
+        {/* Match reason */}
         {app.match_reason && (
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
             {app.match_reason}
           </Typography>
         )}
 
-        <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: 'block' }}>
-          {app.created_at ? new Date(app.created_at).toLocaleDateString() : ''}
+        {/* Matching skills */}
+        {matchingSkills.length > 0 && (
+          <Box mt={1}>
+            <Typography variant="caption" color="success.main" fontWeight="bold">✅ Matching:</Typography>
+            <Box display="flex" flexWrap="wrap" gap={0.5} mt={0.5}>
+              {matchingSkills.slice(0, 4).map(skill => (
+                <Chip key={skill} label={skill} size="small" color="success" variant="outlined" />
+              ))}
+            </Box>
+          </Box>
+        )}
+
+        {/* Missing skills */}
+        {missingSkills.length > 0 && (
+          <Box mt={1}>
+            <Typography variant="caption" color="error.main" fontWeight="bold">⚠️ Missing:</Typography>
+            <Box display="flex" flexWrap="wrap" gap={0.5} mt={0.5}>
+              {missingSkills.slice(0, 3).map(skill => (
+                <Chip key={skill} label={skill} size="small" color="error" variant="outlined" />
+              ))}
+            </Box>
+          </Box>
+        )}
+
+        <Typography variant="caption" color="text.disabled" sx={{ mt: 1, display: 'block' }}>
+          Added {app.created_at ? new Date(app.created_at).toLocaleDateString() : ''}
         </Typography>
       </CardContent>
+
+      {/* Apply button */}
+      {app.url && (
+        <CardActions sx={{ px: 2, pb: 2, pt: 0 }}>
+          <Button
+            variant={status === 'saved' ? 'contained' : 'outlined'}
+            size="small"
+            fullWidth
+            href={app.url}
+            target="_blank"
+            endIcon={<OpenInNewIcon />}
+            color="primary"
+          >
+            {status === 'saved' ? 'Apply Now' : 'View Job'}
+          </Button>
+        </CardActions>
+      )}
     </Card>
   );
 }
@@ -169,7 +225,7 @@ export default function Dashboard() {
 
       {/* Filter */}
       <Box display="flex" gap={1} mb={2} flexWrap="wrap">
-        {['all', 'applied', 'interview_scheduled', 'offer', 'rejected'].map(s => (
+        {['all', 'saved', 'applied', 'interview_scheduled', 'offer', 'rejected'].map(s => (
           <Chip
             key={s}
             label={s === 'all' ? 'All' : STATUS_LABELS[s]}
@@ -183,7 +239,9 @@ export default function Dashboard() {
       {/* Applications Grid */}
       {filtered.length === 0 ? (
         <Box textAlign="center" mt={6}>
-          <Typography color="text.secondary">No applications yet. Start by searching for jobs!</Typography>
+          <Typography color="text.secondary">
+            {filter === 'all' ? 'No applications yet. Start by searching for jobs!' : `No applications with status "${STATUS_LABELS[filter]}".`}
+          </Typography>
         </Box>
       ) : (
         <Grid container spacing={2}>

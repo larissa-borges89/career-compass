@@ -103,27 +103,53 @@ def search_jobs(request: JobSearchRequest, db: Session = Depends(get_db)):
 
     matches = match_jobs(profile, all_jobs, min_score=request.min_score)
 
-    # Save to database
-    db.query(JobListing).delete()
-    for job in matches:
-        db_job = JobListing(
-            title=job.get("title", ""),
-            company=job.get("company", ""),
-            location=job.get("location", ""),
-            description=job.get("description", ""),
-            url=job.get("url", ""),
-            source=job.get("source", ""),
-            date_posted=str(job.get("date", "")),
-            days_old=job.get("days_old") or 0,
-            match_score=job.get("match_score", 0),
-            match_verdict=job.get("match_verdict", ""),
-            match_reason=job.get("match_reason", ""),
-            matching_skills=json.dumps(job.get("matching_skills", [])),
-            missing_skills=json.dumps(job.get("missing_skills", [])),
-        )
-        db.add(db_job)
+    # Save to database: upsert by company+title to preserve tracked jobs
+    # Step 1: delete only jobs NOT already in the tracker
+    tracked_keys = {
+        (app.company.lower(), app.role.lower())
+        for app in db.query(Application).all()
+    }
+    for existing_job in db.query(JobListing).all():
+        key = (existing_job.company.lower(), existing_job.title.lower())
+        if key not in tracked_keys:
+            db.delete(existing_job)
     db.commit()
 
+    # Step 2: upsert new results — update if exists, insert if not
+    for job in matches:
+        title = job.get("title", "")
+        company = job.get("company", "")
+        existing = db.query(JobListing).filter(
+            JobListing.company == company,
+            JobListing.title == title
+        ).first()
+        if existing:
+            existing.match_score = job.get("match_score", 0)
+            existing.match_verdict = job.get("match_verdict", "")
+            existing.match_reason = job.get("match_reason", "")
+            existing.date_posted = str(job.get("date", ""))
+            existing.days_old = job.get("days_old") or 0
+        else:
+            db_job = JobListing(
+                title=title,
+                company=company,
+                location=job.get("location", ""),
+                description=job.get("description", ""),
+                url=job.get("url", ""),
+                source=job.get("source", ""),
+                date_posted=str(job.get("date", "")),
+                days_old=job.get("days_old") or 0,
+                match_score=job.get("match_score", 0),
+                match_verdict=job.get("match_verdict", ""),
+                match_reason=job.get("match_reason", ""),
+                matching_skills=json.dumps(job.get("matching_skills", [])),
+                missing_skills=json.dumps(job.get("missing_skills", [])),
+            )
+            db.add(db_job)
+    db.commit()
+
+    # Step 3: return all jobs (new + previously tracked) sorted by score
+    all_db_jobs = db.query(JobListing).order_by(JobListing.match_score.desc()).all()
     return {"found": len(matches), "keywords": keywords, "jobs": matches}
 
 
@@ -133,10 +159,18 @@ def apply_to_job(job_id: int, db: Session = Depends(get_db)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # Prevent duplicates: check if already in tracker
+    existing = db.query(Application).filter(
+        Application.company == job.company,
+        Application.role == job.title
+    ).first()
+    if existing:
+        return existing
+
     db_app = Application(
         company=job.company,
         role=job.title,
-        status="applied",
+        status="saved",
         url=job.url,
         location=job.location,
         match_score=job.match_score,
