@@ -100,14 +100,32 @@ career-compass/
 
 ---
 
+
+## Job Search Pipeline
+
+Career Compass automatically finds and scores job opportunities based on your resume:
+
+### Job Sources
+
+| Source | Coverage | Notes |
+|--------|----------|-------|
+| Adzuna API | LinkedIn, Indeed, Glassdoor + more | Direct API, immediate access |
+| SerpAPI (Google Jobs) | All major job boards aggregated | 100 free searches/month |
+
+Both sources cover jobs originally posted on LinkedIn and Indeed without requiring their restrictive API access.
+
+### Ghost Job Detection
+
+Jobs older than 48 hours are automatically filtered out — following recruiter best practices for maximizing response rates.
+
 ## Roadmap
 
 - [x] Core tracker with CLI
 - [x] Gmail API integration
 - [x] Claude AI email classification
 - [x] Automated email-to-tracker sync
-- [ ] Resume upload and parsing
-- [ ] Job search with AI matching
+- [x] Resume upload and parsing
+- [x] Job search with AI matching (Adzuna + Google Jobs)
 - [ ] REST API with FastAPI
 - [ ] Web interface with React
 
