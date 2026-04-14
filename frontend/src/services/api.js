@@ -1,8 +1,36 @@
 import axios from 'axios';
 
 const API = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api`,
+  timeout: 120000, // 2 min — job search with AI can take a while
 });
+
+// Response interceptor: transform HTTP errors into friendly messages
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (!error.response) {
+      // Network error — backend not running
+      error.friendlyMessage = 'Cannot reach the server. Make sure the backend is running on port 8000.';
+    } else {
+      const status = error.response.status;
+      const detail = error.response.data?.detail;
+
+      if (status === 400) {
+        error.friendlyMessage = detail || 'Invalid request. Check your inputs.';
+      } else if (status === 404) {
+        error.friendlyMessage = detail || 'Resource not found.';
+      } else if (status === 422) {
+        error.friendlyMessage = 'Validation error. Check your inputs.';
+      } else if (status === 500) {
+        error.friendlyMessage = 'Server error. Check the backend logs for details.';
+      } else {
+        error.friendlyMessage = detail || `Unexpected error (${status}).`;
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Applications
 export const getApplications = () => API.get('/applications');

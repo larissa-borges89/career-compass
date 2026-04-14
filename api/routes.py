@@ -5,7 +5,9 @@ from typing import List, Optional
 from pydantic import BaseModel
 from api.database import get_db
 from api.models import Application, JobListing
+from src.logger import get_logger
 
+logger = get_logger("routes")
 router = APIRouter()
 
 
@@ -87,21 +89,30 @@ def search_jobs(request: JobSearchRequest, db: Session = Depends(get_db)):
     if not os.path.exists(resume_path):
         raise HTTPException(status_code=400, detail="Resume not found. Upload resume.pdf first.")
 
+    logger.info("Parsing resume...")
     profile = parse_resume(resume_path)
+    logger.info(f"Resume parsed: {len(profile.get('skills', []))} skills found")
+
+    logger.info("Generating search keywords with Claude AI...")
     keywords = generate_search_keywords(profile)
+    logger.info(f"Keywords generated: {keywords}")
 
     all_jobs = []
     seen = set()
     for keyword in keywords[:3]:
+        logger.info(f"Searching jobs for: '{keyword}' in {request.location}")
         jobs = do_search(keyword, request.location)
         active = filter_ghost_jobs(jobs, max_days=request.max_days)
+        logger.info(f"  → {len(jobs)} found, {len(active)} after ghost filter")
         for job in active:
             key = f"{job['title'].lower()}_{job['company'].lower()}"
             if key not in seen:
                 seen.add(key)
                 all_jobs.append(job)
 
+    logger.info(f"Total unique jobs: {len(all_jobs)} — scoring with Claude AI...")
     matches = match_jobs(profile, all_jobs, min_score=request.min_score)
+    logger.info(f"Matches above {request.min_score}% score: {len(matches)}")
 
     # Save to database: upsert by company+title to preserve tracked jobs
     # Step 1: delete only jobs NOT already in the tracker
@@ -149,7 +160,7 @@ def search_jobs(request: JobSearchRequest, db: Session = Depends(get_db)):
     db.commit()
 
     # Step 3: return all jobs (new + previously tracked) sorted by score
-    all_db_jobs = db.query(JobListing).order_by(JobListing.match_score.desc()).all()
+    logger.info("Job search complete.")
     return {"found": len(matches), "keywords": keywords, "jobs": matches}
 
 

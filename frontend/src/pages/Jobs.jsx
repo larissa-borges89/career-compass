@@ -10,6 +10,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import { getJobs, searchJobs, applyToJob, getApplications } from '../services/api';
+import { useNotification } from '../context/NotificationContext';
 
 const VERDICT_COLOR = {
   strong_match: 'success',
@@ -25,7 +26,7 @@ const VERDICT_LABEL = {
   no_match: 'No Match',
 };
 
-function JobCard({ job, onApply, savedIds, onSaved }) {
+function JobCard({ job, onApply, savedIds, onSaved, onNotify }) {
   const [loading, setLoading] = useState(false);
   const applied = savedIds.has(job.id);
   const score = Math.round(job.match_score || 0);
@@ -41,8 +42,9 @@ function JobCard({ job, onApply, savedIds, onSaved }) {
     try {
       await applyToJob(job.id);
       onSaved(job.id);
+      onNotify('success', `"${job.title}" added to your tracker!`);
     } catch (e) {
-      console.error(e);
+      onNotify('error', e.friendlyMessage || 'Failed to add to tracker.');
     }
     setLoading(false);
   };
@@ -164,6 +166,7 @@ export default function Jobs() {
   const [minScore, setMinScore] = useState(60);
   const [message, setMessage] = useState('');
   const [savedIds, setSavedIds] = useState(new Set());
+  const { success, error: notifyError, info } = useNotification();
 
   const handleSaved = (id) => setSavedIds(prev => new Set([...prev, id]));
 
@@ -174,7 +177,6 @@ export default function Jobs() {
       const jobs = jobsRes.data;
       const apps = appsRes.data;
 
-      // Build savedIds by matching company+role between jobs and existing applications
       const savedSet = new Set();
       jobs.forEach(job => {
         const alreadySaved = apps.some(
@@ -186,7 +188,7 @@ export default function Jobs() {
       setJobs(jobs);
       setSavedIds(savedSet);
     } catch (e) {
-      console.error(e);
+      notifyError(e.friendlyMessage || 'Failed to load jobs.');
     }
     setLoading(false);
   };
@@ -199,9 +201,13 @@ export default function Jobs() {
     try {
       const res = await searchJobs({ location, max_days: maxDays, min_score: minScore });
       setJobs(res.data.jobs || []);
-      setMessage(`Found ${res.data.found} matches using keywords: ${res.data.keywords?.join(', ')}`);
+      const msg = `Found ${res.data.found} matches using keywords: ${res.data.keywords?.join(', ')}`;
+      setMessage(msg);
+      info(msg);
     } catch (e) {
-      setMessage('Error searching jobs. Make sure your resume is uploaded.');
+      const msg = e.friendlyMessage || 'Error searching jobs. Make sure your resume is uploaded.';
+      setMessage(msg);
+      notifyError(msg);
     }
     setSearching(false);
   };
@@ -267,7 +273,7 @@ export default function Jobs() {
           <Grid container spacing={2}>
             {jobs.map(job => (
               <Grid item xs={12} sm={6} md={4} key={job.id}>
-                <JobCard job={job} savedIds={savedIds} onSaved={handleSaved} />
+                <JobCard job={job} savedIds={savedIds} onSaved={handleSaved} onNotify={(sev, msg) => sev === 'success' ? success(msg) : notifyError(msg)} />
               </Grid>
             ))}
           </Grid>
