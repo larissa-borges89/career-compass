@@ -41,7 +41,7 @@ def list_applications(db: Session = Depends(get_db)):
 
 @router.post("/applications")
 def create_application(app: ApplicationCreate, db: Session = Depends(get_db)):
-    db_app = Application(**app.dict())
+    db_app = Application(**app.model_dump())
     db.add(db_app)
     db.commit()
     db.refresh(db_app)
