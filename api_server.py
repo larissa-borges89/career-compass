@@ -4,6 +4,8 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from api.routes import router
+from api.database import engine, Base
+from api import models  # noqa: F401 — ensures models are registered before create_all
 from src.logger import get_logger
 
 logger = get_logger("api_server")
@@ -22,6 +24,10 @@ app = FastAPI(
     description="AI-powered job application tracker",
     version="3.2.0"
 )
+
+# Create database tables on startup if they don't exist
+Base.metadata.create_all(bind=engine)
+logger.info("Database tables verified/created")
 
 app.add_middleware(
     CORSMiddleware,
