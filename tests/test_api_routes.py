@@ -1,4 +1,4 @@
-"""Integration tests for FastAPI routes."""
+"""Integration tests for FastAPI routes — uses in-memory database via conftest.py."""
 import pytest
 from fastapi.testclient import TestClient
 from api_server import app
@@ -39,7 +39,6 @@ def test_create_application():
 
 
 def test_update_application_status():
-    # Create first
     create = client.post("/api/applications", json={
         "company": "Acme Inc",
         "role": "Backend Engineer",
@@ -47,7 +46,6 @@ def test_update_application_status():
     })
     app_id = create.json()["id"]
 
-    # Update status
     response = client.patch(f"/api/applications/{app_id}", json={"status": "applied"})
     assert response.status_code == 200
     assert response.json()["status"] == "applied"
@@ -69,7 +67,6 @@ def test_delete_application():
     response = client.delete(f"/api/applications/{app_id}")
     assert response.status_code == 200
 
-    # Confirm it's gone
     apps = client.get("/api/applications").json()
     assert not any(a["id"] == app_id for a in apps)
 
