@@ -3,6 +3,9 @@ import axios from 'axios';
 const API = axios.create({
   baseURL: `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api`,
   timeout: 120000, // 2 min — job search with AI can take a while
+  headers: {
+    'X-API-Key': process.env.REACT_APP_API_KEY || '',
+  },
 });
 
 // Response interceptor: transform HTTP errors into friendly messages
