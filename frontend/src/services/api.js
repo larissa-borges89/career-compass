@@ -56,5 +56,10 @@ export const uploadResume = (file) => {
 };
 export const getProfile = () => API.get('/resume/profile');
 
+// Gmail
+export const getGmailStatus = () => API.get('/gmail/status');
+export const getGmailAuthUrl = () => API.get('/gmail/auth');
+export const syncGmail = () => API.post('/gmail/sync');
+
 // Stats
 export const getStats = () => API.get('/stats');

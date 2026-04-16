@@ -11,7 +11,9 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import EditIcon from '@mui/icons-material/Edit';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { getApplications, getStats, updateApplication } from '../services/api';
+import SyncIcon from '@mui/icons-material/Sync';
+import { getApplications, getStats, updateApplication, syncGmail, getGmailStatus, getGmailAuthUrl } from '../services/api';
+import { useNotification } from '../context/NotificationContext';
 
 const STATUS_COLORS = {
   saved: 'default',
@@ -182,6 +184,44 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [syncing, setSyncing] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const { success, error: notifyError, info } = useNotification();
+
+  const checkGmailStatus = async () => {
+    try {
+      const res = await getGmailStatus();
+      setGmailConnected(res.data.connected);
+    } catch (e) {
+      setGmailConnected(false);
+    }
+  };
+
+  const handleConnectGmail = async () => {
+    try {
+      const res = await getGmailAuthUrl();
+      const { auth_url } = res.data;
+      window.open(auth_url, '_blank', 'width=500,height=600');
+      info('Complete authentication in the popup. Then click Sync Gmail.');
+      // Poll for connection after a delay
+      setTimeout(checkGmailStatus, 5000);
+    } catch (e) {
+      notifyError(e.friendlyMessage || 'Failed to start Gmail authentication.');
+    }
+  };
+
+  const handleGmailSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await syncGmail();
+      const { added, processed } = res.data;
+      success(`Gmail sync complete: ${processed} emails processed, ${added} new application${added !== 1 ? 's' : ''} added.`);
+      await loadData();
+    } catch (e) {
+      notifyError(e.friendlyMessage || 'Gmail sync failed.');
+    }
+    setSyncing(false);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -195,7 +235,10 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    checkGmailStatus();
+  }, []);
 
   const filtered = filter === 'all' ? apps : apps.filter(a => a.status === filter);
 
@@ -203,7 +246,30 @@ export default function Dashboard() {
 
   return (
     <Box p={3}>
-      <Typography variant="h4" fontWeight="bold" gutterBottom>🧭 My Applications</Typography>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+        <Typography variant="h4" fontWeight="bold">🧭 My Applications</Typography>
+        {gmailConnected ? (
+          <Button
+            variant="outlined"
+            startIcon={syncing ? <CircularProgress size={16} /> : <SyncIcon />}
+            onClick={handleGmailSync}
+            disabled={syncing}
+            sx={{ textTransform: 'none', borderRadius: 2 }}
+          >
+            {syncing ? 'Syncing...' : 'Sync Gmail'}
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            startIcon={<SyncIcon />}
+            onClick={handleConnectGmail}
+            color="primary"
+            sx={{ textTransform: 'none', borderRadius: 2 }}
+          >
+            Connect Gmail
+          </Button>
+        )}
+      </Box>
 
       {/* Stats */}
       {stats && (
