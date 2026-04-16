@@ -1,5 +1,8 @@
 import os
 import time
+from dotenv import load_dotenv
+load_dotenv()  # Load .env file before anything else — required for MOCK_APIS, API_KEY, etc.
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
@@ -43,8 +46,10 @@ async def authenticate(request: Request, call_next):
     """API Key authentication middleware. Skips /health for monitoring."""
     server_key = os.getenv("API_KEY", "")
 
-    # Skip auth if no key configured (local dev) or for health check
-    if not server_key or request.url.path == "/health":
+    # Skip auth if no key configured (local dev), health check, CORS preflight,
+    # or Google OAuth redirect (comes from browser without header)
+    public_paths = {"/health", "/api/gmail/callback"}
+    if not server_key or request.url.path in public_paths or request.method == "OPTIONS":
         return await call_next(request)
 
     client_key = request.headers.get("X-API-Key", "")
