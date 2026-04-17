@@ -142,6 +142,10 @@ def fetch_job_emails(max_results: int = 20) -> list:
                 "subject": headers.get("Subject", "(no subject)"),
                 "from": headers.get("From", ""),
                 "date": headers.get("Date", ""),
+                # internalDate = ms since epoch (UTC), assigned by Gmail on receipt.
+                # Always present and reliable — prefer over the RFC 2822 "Date" header,
+                # which can be malformed or spoofed by the sender.
+                "internal_date": full_msg.get("internalDate"),
                 "snippet": full_msg.get("snippet", "")
             })
         except Exception as e:
@@ -220,6 +224,7 @@ def process_job_emails(max_emails: int = 20) -> list:
             "status": classification.get("status", "unknown"),
             "summary": classification.get("summary", ""),
             "date": email["date"],
+            "internal_date": email.get("internal_date"),
         })
 
     logger.info(f"Gmail processing complete: {len(results)} emails classified.")

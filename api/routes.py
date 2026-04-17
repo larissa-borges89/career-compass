@@ -352,26 +352,19 @@ def gmail_sync(db: Session = Depends(get_db)):
         logger.info("🧪 MOCK MODE — returning mock email classifications")
         results = MOCK_EMAIL_CLASSIFICATIONS
     else:
-        # ⚠️  REAL API CALLS TEMPORARILY DISABLED
-        # To re-enable: set MOCK_APIS=false in .env and uncomment the block below
-        raise HTTPException(
-            status_code=503,
-            detail="Real API calls are disabled during development. Set MOCK_APIS=true in .env."
-        )
+        from src.gmail_api import process_job_emails
 
-        # from src.gmail_api import process_job_emails
-        #
-        # if not os.path.exists("token.json"):
-        #     raise HTTPException(
-        #         status_code=400,
-        #         detail="Gmail not connected. Run 'python main.py' and choose option 2 to authenticate first."
-        #     )
-        #
-        # if not check_limit("claude"):
-        #     raise HTTPException(status_code=429, detail="Claude API daily limit reached. Try again tomorrow.")
-        #
-        # logger.info("Starting Gmail sync...")
-        # results = process_job_emails()
+        if not os.path.exists("token.json"):
+            raise HTTPException(
+                status_code=400,
+                detail="Gmail not connected. Click 'Connect Gmail' first."
+            )
+
+        if not check_limit("claude"):
+            raise HTTPException(status_code=429, detail="Claude API daily limit reached. Try again tomorrow.")
+
+        logger.info("Starting Gmail sync...")
+        results = process_job_emails()
     logger.info(f"Gmail returned {len(results)} classified emails")
 
     added = 0
@@ -403,12 +396,27 @@ def gmail_sync(db: Session = Depends(get_db)):
                 logger.info(f"Updated status: {company} → {item['status']}")
             skipped += 1
         else:
-            db_app = Application(
-                company=company,
-                role=role,
-                status=item["status"],
-                notes=item.get("summary", ""),
-            )
+            # Use Gmail's internalDate (ms since epoch, UTC) as the application date.
+            # Always present from the Gmail API — reliable, unlike the RFC 2822 "Date" header.
+            from datetime import datetime
+            email_date = None
+            if item.get("internal_date"):
+                try:
+                    email_date = datetime.fromtimestamp(int(item["internal_date"]) / 1000)
+                except (ValueError, TypeError):
+                    logger.warning(f"Could not parse internal_date for {company}: {item.get('internal_date')}")
+                    email_date = None
+
+            app_kwargs = {
+                "company": company,
+                "role": role,
+                "status": item["status"],
+                "notes": item.get("summary", ""),
+            }
+            if email_date:
+                app_kwargs["created_at"] = email_date
+
+            db_app = Application(**app_kwargs)
             db.add(db_app)
             added += 1
             # TODO: increment("claude") runs even in MOCK mode, inflating the usage counter.
