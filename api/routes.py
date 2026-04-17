@@ -396,12 +396,27 @@ def gmail_sync(db: Session = Depends(get_db)):
                 logger.info(f"Updated status: {company} → {item['status']}")
             skipped += 1
         else:
-            db_app = Application(
-                company=company,
-                role=role,
-                status=item["status"],
-                notes=item.get("summary", ""),
-            )
+            # Use Gmail's internalDate (ms since epoch, UTC) as the application date.
+            # Always present from the Gmail API — reliable, unlike the RFC 2822 "Date" header.
+            from datetime import datetime
+            email_date = None
+            if item.get("internal_date"):
+                try:
+                    email_date = datetime.fromtimestamp(int(item["internal_date"]) / 1000)
+                except (ValueError, TypeError):
+                    logger.warning(f"Could not parse internal_date for {company}: {item.get('internal_date')}")
+                    email_date = None
+
+            app_kwargs = {
+                "company": company,
+                "role": role,
+                "status": item["status"],
+                "notes": item.get("summary", ""),
+            }
+            if email_date:
+                app_kwargs["created_at"] = email_date
+
+            db_app = Application(**app_kwargs)
             db.add(db_app)
             added += 1
             # TODO: increment("claude") runs even in MOCK mode, inflating the usage counter.
