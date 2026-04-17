@@ -44,3 +44,12 @@ def setup_test_db():
 @pytest.fixture(scope="function")
 def client():
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def disable_auth_by_default(monkeypatch):
+    """Unset API_KEY for all tests by default, so integration tests don't
+    need to send the X-API-Key header on every request. Tests in
+    test_auth.py that specifically exercise the auth middleware override
+    this via their own monkeypatch.setenv() calls."""
+    monkeypatch.delenv("API_KEY", raising=False)
