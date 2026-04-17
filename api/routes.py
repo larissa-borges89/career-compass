@@ -352,26 +352,19 @@ def gmail_sync(db: Session = Depends(get_db)):
         logger.info("🧪 MOCK MODE — returning mock email classifications")
         results = MOCK_EMAIL_CLASSIFICATIONS
     else:
-        # ⚠️  REAL API CALLS TEMPORARILY DISABLED
-        # To re-enable: set MOCK_APIS=false in .env and uncomment the block below
-        raise HTTPException(
-            status_code=503,
-            detail="Real API calls are disabled during development. Set MOCK_APIS=true in .env."
-        )
+        from src.gmail_api import process_job_emails
 
-        # from src.gmail_api import process_job_emails
-        #
-        # if not os.path.exists("token.json"):
-        #     raise HTTPException(
-        #         status_code=400,
-        #         detail="Gmail not connected. Run 'python main.py' and choose option 2 to authenticate first."
-        #     )
-        #
-        # if not check_limit("claude"):
-        #     raise HTTPException(status_code=429, detail="Claude API daily limit reached. Try again tomorrow.")
-        #
-        # logger.info("Starting Gmail sync...")
-        # results = process_job_emails()
+        if not os.path.exists("token.json"):
+            raise HTTPException(
+                status_code=400,
+                detail="Gmail not connected. Click 'Connect Gmail' first."
+            )
+
+        if not check_limit("claude"):
+            raise HTTPException(status_code=429, detail="Claude API daily limit reached. Try again tomorrow.")
+
+        logger.info("Starting Gmail sync...")
+        results = process_job_emails()
     logger.info(f"Gmail returned {len(results)} classified emails")
 
     added = 0
