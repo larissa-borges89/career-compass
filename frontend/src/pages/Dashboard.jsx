@@ -154,9 +154,11 @@ function ApplicationCard({ app, onStatusUpdate }) {
           </Box>
         )}
 
-        <Typography variant="caption" color="text.disabled" sx={{ mt: 1, display: 'block' }}>
-          Added {app.created_at ? new Date(app.created_at).toLocaleDateString() : ''}
-        </Typography>
+        {app.created_at && (
+          <Typography variant="caption" color="text.disabled" sx={{ mt: 1, display: 'block' }}>
+            Added {new Date(app.created_at).toLocaleDateString()}
+          </Typography>
+        )}
       </CardContent>
 
       {/* Apply button */}
